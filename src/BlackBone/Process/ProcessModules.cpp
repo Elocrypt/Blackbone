@@ -418,13 +418,24 @@ call_result_t<ModuleDataPtr> ProcessModules::Inject( const std::wstring& path, T
     // Write dll name into target process
     auto fillDllName = [&modName, &path]( auto& ustr )
     {
-        ustr.Buffer = modName->ptr<std::decay_t<decltype(ustr)>::type>() + sizeof( ustr );
-        ustr.MaximumLength = ustr.Length = static_cast<USHORT>(path.size() * sizeof( wchar_t ));
+        auto& memoryBlock = modName.result();
 
-        modName->Write( 0, ustr );
-        modName->Write( sizeof( ustr ), path.size() * sizeof( wchar_t ), path.c_str() );
+        auto basePtr = memoryBlock.ptr<uint8_t*>();
 
-        return static_cast<uint32_t>(sizeof( ustr ));
+        ustr.Buffer = reinterpret_cast<decltype(ustr.Buffer)>(basePtr + sizeof(ustr));
+        ustr.MaximumLength = ustr.Length = static_cast<USHORT>(path.size() * sizeof(wchar_t));
+
+        NTSTATUS status = memoryBlock.Write(0, sizeof(ustr), &ustr);
+        if (!NT_SUCCESS(status)) {
+            // TODO: handle error
+        }
+
+        status = memoryBlock.Write(sizeof(ustr), path.size() * sizeof(wchar_t), path.c_str());
+        if (!NT_SUCCESS(status)) {
+            // TODO: handle error
+        }
+
+        return static_cast<uint32_t>(sizeof(ustr) + path.size() * sizeof(wchar_t));
     };
 
     if (img.mType() == mt_mod32)
